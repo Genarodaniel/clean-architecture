@@ -1,68 +1,213 @@
 # Clean Architecture
 
-This is a project to study Clean Architecture and implement it in a simple order service.
+This is a project to study Clean Architecture and implement it in a simple category service.
 
-## Architectural Boundaries
+## Entities
 
-- **Separate Details:** Tools like databases, queue systems, and frontend technologies should exist outside the core business rules.
-- **Entities:** Represent the business rules.
+### What Are Entities in Clean Architecture?
+Entities represent the core business rules and are independent of specific applications or frameworks. They encapsulate the critical data and behavior central to the domain and remain unchanged across various contexts.
 
-## Key Concepts About Architecture
+### Characteristics of Entities
+- **Core Business Logic:** Entities are where the most critical business rules are implemented.
+- **Independence:** Entities do not rely on external frameworks, databases, or tools. They are designed to be framework-agnostic.
+- **Reusability:** Entities can be reused across different applications or layers without modification.
 
-- **Structure and Components:** Think about the structure of the software and the division of its components. The architecture defines how components communicate, much like an elevator or staircase in a building connects floors.
-- **Facilitation:** A good architecture facilitates development, deployment, operation, and maintenance of the application.
-- **Flexibility:** "The strategy behind that facilitation is to leave as many options open as possible, for as long as possible."
+### Example: Category Entity in Go
+Here is an example of how an entity for a "Category" might look in Go:
 
-## Keep Options Open
+```go
+package entity
 
-- **Business Rules First:** The core value of the software lies in its business rules.
-- **Details Are Secondary:** Technologies like RabbitMQ, SQS, or specific databases are details; the focus should be on managing queues or data, regardless of the tool used.
-- **Independence:** Frameworks, databases, or APIs should not impact business rules.
+import (
+	"errors"
+)
+
+type Category struct {
+	ID   int
+	Name string
+}
+
+func NewCategory(name string) (*Category, error) {
+	if name == "" {
+		return nil, errors.New("category name cannot be empty")
+	}
+	return &Category{
+		ID:   0, // ID will be set when persisted
+		Name: name,
+	}, nil
+}
+
+func (c *Category) Rename(newName string) error {
+	if newName == "" {
+		return errors.New("new category name cannot be empty")
+	}
+	c.Name = newName
+	return nil
+}
+```
+
+### Explanation
+- The `Category` struct encapsulates the business rules for managing categories.
+- Validation rules, such as checking for an empty name, are built into the entity's methods.
+- Entities like `Category` are used by the application use cases to implement business workflows.
 
 ## Use Cases
 
-- **Intentions:** Use cases represent the intentions of the software's components. Each action corresponds to a specific use case.
-- **Clarify Behavior:** Define the expected behavior of the software.
-- **Details Postponed:** Delay decisions on specifics like the database or queue system as much as possible.
+### What Are Use Cases in Clean Architecture?
+Use cases define the specific application behaviors, representing the intentions of the system. They coordinate the flow of data between external interfaces and the business entities to fulfill user or system actions.
 
-### Use Cases Tell a Story
+### Characteristics of Use Cases
+- **Focus on Behavior:** Use cases describe *how* the application interacts with entities to accomplish a task.
+- **Independent of Details:** They do not concern themselves with specific technologies or frameworks.
+- **Encapsulation:** Each use case is responsible for a single action, such as creating or updating a category.
 
-- A use case defines the sequence of actions in automation:
-  1. Receive parameters.
-  2. Validate data (e.g., name, address).
-  3. Perform calculations or checks (e.g., credit score).
-  4. Make decisions based on validations.
-- Business rules reside within entities.
+### Example: Create Category Use Case in Go
+Here’s an example of implementing a use case to create a category:
 
-### Single Responsibility Principle (SRP)
+```go
+package usecase
 
-- Avoid reusing use cases just because they seem similar. For example, "Update" and "Insert" may share some functionality but serve distinct purposes and should remain separate.
-- Each use case should change for a single reason.
+import (
+	"errors"
+	"myproject/internal/entity"
+)
 
-### Repetition
+type CreateCategoryInput struct {
+	Name string
+}
 
-- **Accept Real Repetition:** Some code repetition is acceptable if it reflects different intentions, such as validating a record before insertion or updating.
+type CreateCategoryOutput struct {
+	ID   int
+	Name string
+}
 
-## Input and Output
+type CategoryRepository interface {
+	Save(category *entity.Category) (*entity.Category, error)
+}
 
-- Simplify your logic by focusing on input and output.
-  - Example: For an order service, `Order Data` is the input, and `Order Created` is the output.
+type CreateCategoryUseCase struct {
+	repo CategoryRepository
+}
 
-### Important Workflow
+func NewCreateCategoryUseCase(repo CategoryRepository) *CreateCategoryUseCase {
+	return &CreateCategoryUseCase{repo: repo}
+}
 
-1. External interfaces (e.g., GraphQL, REST, gRPC, CLI) receive input data.
-2. Controllers validate the input and send it to the use cases.
-3. Use cases perform the intended operations using business rules.
-4. Use cases return outputs to the controllers, which format the response for the external interface.
+func (uc *CreateCategoryUseCase) Execute(input CreateCategoryInput) (*CreateCategoryOutput, error) {
+	if input.Name == "" {
+		return nil, errors.New("category name cannot be empty")
+	}
 
-### Example Workflow
+	category, err := entity.NewCategory(input.Name)
+	if err != nil {
+		return nil, err
+	}
 
-- Controller -> Use Case Input Port -> Use Case Interactor -> Presenter -> Use Case Output Port -> Controller -> Response
-- **Presenter:** Formats the output to match the required response format (e.g., JSON, XML).
+	savedCategory, err := uc.repo.Save(category)
+	if err != nil {
+		return nil, err
+	}
 
-### Folder Organization in Go
+	return &CreateCategoryOutput{
+		ID:   savedCategory.ID,
+		Name: savedCategory.Name,
+	}, nil
+}
+```
 
-A possible folder structure for a project following Clean Architecture principles in Go:
+### Explanation
+1. **Input and Output DTOs:**
+   - `CreateCategoryInput` captures the input required for the use case.
+   - `CreateCategoryOutput` represents the response returned after execution.
+2. **Dependency on a Repository:**
+   - The use case relies on a `CategoryRepository` interface for persisting the entity. This ensures the use case is not tied to a specific database implementation.
+3. **Workflow:**
+   - Validate the input.
+   - Create a `Category` entity using its business rules.
+   - Save the entity using the repository.
+   - Return the saved entity's details.
+
+## Repository
+
+### What Is a Repository in Clean Architecture?
+A repository provides an abstraction layer between the domain entities and the data storage mechanism. It allows use cases to interact with data sources without needing to know the specifics of database operations.
+
+### Characteristics of a Repository
+- **Abstraction:** The repository defines a contract (interface) for data operations, hiding the details of the underlying storage.
+- **Flexibility:** By adhering to the interface, the implementation can be swapped out (e.g., from one database to another) without affecting the business logic.
+- **Testability:** Use cases can be tested with mock implementations of the repository.
+
+### Example: Repository Implementation
+Here’s a simple implementation of the `CategoryRepository` interface:
+
+```go
+package repository
+
+import (
+	"errors"
+	"myproject/internal/entity"
+)
+
+type CategoryRepositoryImpl struct {
+	categories []entity.Category
+	nextID     int
+}
+
+func NewCategoryRepository() *CategoryRepositoryImpl {
+	return &CategoryRepositoryImpl{
+		categories: []entity.Category{},
+		nextID:     1,
+	}
+}
+
+func (r *CategoryRepositoryImpl) Save(category *entity.Category) (*entity.Category, error) {
+	if category == nil {
+		return nil, errors.New("category is nil")
+	}
+
+	category.ID = r.nextID
+	r.nextID++
+	r.categories = append(r.categories, *category)
+
+	return category, nil
+}
+```
+
+### Workflow Example
+Here’s an example of how to wire up everything and execute the use case:
+
+```go
+package main
+
+import (
+	"fmt"
+	"myproject/internal/entity"
+	"myproject/internal/repository"
+	"myproject/internal/usecase"
+)
+
+func main() {
+	repo := repository.NewCategoryRepository()
+	useCase := usecase.NewCreateCategoryUseCase(repo)
+
+	input := usecase.CreateCategoryInput{Name: "Electronics"}
+	output, err := useCase.Execute(input)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+
+	fmt.Printf("Category Created: ID=%d, Name=%s\n", output.ID, output.Name)
+}
+```
+
+### Key Points
+- **Abstraction in Action:** The `CategoryRepository` interface defines the data persistence contract, while the implementation fulfills it.
+- **Separation of Concerns:** The repository ensures that the persistence logic is separate from the business logic.
+- **Flexibility for Growth:** Additional implementations (e.g., SQL, NoSQL, or external APIs) can be added later by adhering to the same interface.
+
+## Folder Organization in Clean Architecture
+Here’s an example of how to organize folders for a project following Clean Architecture principles:
 
 ```plaintext
 project/
@@ -87,10 +232,9 @@ project/
 ```
 
 ### Explanation of Folders
-
 - **cmd/**: Contains the entry points for your application. Separate subfolders can manage HTTP servers, gRPC services, or CLI tools.
 - **internal/**: The core application logic, further divided into:
-  - **entity/**: Holds business entities and domain models (e.g., Order, Customer).
+  - **entity/**: Holds business entities and domain models (e.g., `Category`).
   - **usecase/**: Contains the application’s use cases, implementing the core business workflows.
   - **interface/**: Contains adapters for interacting with external systems, split into controllers (input) and presenters (output).
   - **repository/**: Abstracts interactions with data sources, like databases or external APIs.
@@ -98,72 +242,5 @@ project/
 - **configs/**: Contains configuration files like YAML or JSON for managing environment-specific settings.
 - **docs/**: Stores project documentation, such as API specifications or architecture overviews.
 
-This structure enforces separation of concerns, making the application easier to maintain and scale.
+This structure
 
-## Presenters
-
-- Transform output DTOs into the required format for delivery.
-
-### Complete Implementation Example in Go
-
-```go
-package main
-
-import (
-	"encoding/json"
-	"encoding/xml"
-	"fmt"
-)
-
-type CategoryInputDTO struct {
-	Name string `json:"name"`
-}
-
-type CategoryOutputDTO struct {
-	ID   int    `json:"id"`
-	Name string `json:"name"`
-}
-
-func CreateCategoryUseCase(input CategoryInputDTO) CategoryOutputDTO {
-	// Simulate creating a category and returning the result
-	return CategoryOutputDTO{
-		ID:   1,
-		Name: input.Name,
-	}
-}
-
-type CategoryPresenter struct {
-	Output CategoryOutputDTO
-}
-
-func (p CategoryPresenter) ToJson() string {
-	result, _ := json.Marshal(p.Output)
-	return string(result)
-}
-
-func (p CategoryPresenter) ToXml() string {
-	result, _ := xml.MarshalIndent(p.Output, "", "  ")
-	return string(result)
-}
-
-func main() {
-	input := CategoryInputDTO{Name: "Electronics"}
-	output := CreateCategoryUseCase(input)
-	presenter := CategoryPresenter{Output: output}
-
-	jsonResult := presenter.ToJson()
-	xmlResult := presenter.ToXml()
-
-	fmt.Println("JSON Result:")
-	fmt.Println(jsonResult)
-	fmt.Println("\nXML Result:")
-	fmt.Println(xmlResult)
-}
-```
-
-## Entities
-
-- **In Clean Architecture:** Entities represent the business rules layer.
-- **In DDD:** Entities represent unique objects within the application.
-- **Combination:** Entities in Clean Architecture typically combine aggregates and domain services.
-- They are independent of specific situations and reusable across contexts.
