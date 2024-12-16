@@ -1,134 +1,169 @@
-# clean-architecture
-This is a project to study about clean architecture and implement it in a simple order service
+# Clean Architecture
 
+This is a project to study Clean Architecture and implement it in a simple order service.
 
-###### Key concepts about architecture  #############
+## Architectural Boundaries
 
-Key concepts about architecture:
+- **Separate Details:** Tools like databases, queue systems, and frontend technologies should exist outside the core business rules.
+- **Entities:** Represent the business rules.
 
+## Key Concepts About Architecture
 
-- The format software will have. 
-- Division of components (Think about architecture is thiking about which components the software will have)
-- Communication among components (just like in a building to move floor to floor you'll need an elevator or a staircase)
-- A good architecture will help the development, deploy, operation and maintenance of the application.
+- **Structure and Components:** Think about the structure of the software and the division of its components. The architecture defines how components communicate, much like an elevator or staircase in a building connects floors.
+- **Facilitation:** A good architecture facilitates development, deployment, operation, and maintenance of the application.
+- **Flexibility:** "The strategy behind that facilitation is to leave as many options open as possible, for as long as possible."
 
+## Keep Options Open
 
-"The strategy behind that facilitation is to leave as many options open as possible, for as long as possible." 
+- **Business Rules First:** The core value of the software lies in its business rules.
+- **Details Are Secondary:** Technologies like RabbitMQ, SQS, or specific databases are details; the focus should be on managing queues or data, regardless of the tool used.
+- **Independence:** Frameworks, databases, or APIs should not impact business rules.
 
+## Use Cases
 
-###### KEEP OPTIONS OPEN #############
+- **Intentions:** Use cases represent the intentions of the software's components. Each action corresponds to a specific use case.
+- **Clarify Behavior:** Define the expected behavior of the software.
+- **Details Postponed:** Delay decisions on specifics like the database or queue system as much as possible.
 
-KEEP OPTIONS OPEN : 
+### Use Cases Tell a Story
 
+- A use case defines the sequence of actions in automation:
+  1. Receive parameters.
+  2. Validate data (e.g., name, address).
+  3. Perform calculations or checks (e.g., credit score).
+  4. Make decisions based on validations.
+- Business rules reside within entities.
 
-- Business rules are the real valuable thing for the software
-- Details helps to support the rules
-- Details shouldn't impact the business rules (when architecturing a software you should be more aware of the business rules than the technology, the rabbitMQ x SQS is detail, the software must deal with a Queue, no matter what type it is)
-- Frameworks, databases, apis, shouldn't impact the business rules.
+### Single Responsibility Principle (SRP)
 
+- Avoid reusing use cases just because they seem similar. For example, "Update" and "Insert" may share some functionality but serve distinct purposes and should remain separate.
+- Each use case should change for a single reason.
 
-####  Remember DDD? ####################
+### Repetition
 
-To attack the complexity in the heart of the software. 
+- **Accept Real Repetition:** Some code repetition is acceptable if it reflects different intentions, such as validating a record before insertion or updating.
 
-Business rules are the heart of the software, the pluggable things are details(sqs,mysql,graphql,rest)
+## Input and Output
 
+- Simplify your logic by focusing on input and output.
+  - Example: For an order service, `Order Data` is the input, and `Order Created` is the output.
 
+### Important Workflow
 
-##### USE CASES ##################
+1. External interfaces (e.g., GraphQL, REST, gRPC, CLI) receive input data.
+2. Controllers validate the input and send it to the use cases.
+3. Use cases perform the intended operations using business rules.
+4. Use cases return outputs to the controllers, which format the response for the external interface.
 
-- Use cases in CA means the intention of a component from our software
-- Each action is a intention, each intention is a use case. 
-- To clarify each behavior of the software 
-- Details should not impact in the business rules
-- The art of work with clean architecture is to postergate the max the details like: "Which Database we should use? Which queue system ? Grpc? Rest? "
+### Example Workflow
 
+- Controller -> Use Case Input Port -> Use Case Interactor -> Presenter -> Use Case Output Port -> Controller -> Response
+- **Presenter:** Formats the output to match the required response format (e.g., JSON, XML).
 
+### Folder Organization in Go
 
-##### USE CASES - SRP (Single responsibility principle) ##################
+A possible folder structure for a project following Clean Architecture principles in Go:
 
-- We tend to "reuse" use cases because they are similar.
-- Ex: Update vs insert. They both verify if the register exist, and persists the data. But, are use cases differents, whey ?
-- SRP (Single Responsibility Principle) => Changes for different reasons
-- Resist the will to change code, each use case has his own responsibilit 
+```plaintext
+project/
+│
+├── cmd/                # Main applications of the project
+│   ├── api/            # HTTP or gRPC server initialization
+│   └── cli/            # Command-line tool initialization
+│
+├── internal/           # Application-specific code
+│   ├── entity/         # Business entities and domain logic
+│   ├── usecase/        # Application use cases
+│   ├── interface/      # Interfaces for external systems
+│   │   ├── controller/ # HTTP or gRPC controllers
+│   │   └── presenter/  # Format output for various interfaces (JSON, XML, etc.)
+│   └── repository/     # Abstraction for data storage and retrieval
+│
+├── pkg/                # Shared utility packages (optional)
+│
+├── configs/            # Configuration files
+│
+└── docs/               # Documentation
+```
 
+### Explanation of Folders
 
-##### Real repetition x accidentally 
+- **cmd/**: Contains the entry points for your application. Separate subfolders can manage HTTP servers, gRPC services, or CLI tools.
+- **internal/**: The core application logic, further divided into:
+  - **entity/**: Holds business entities and domain models (e.g., Order, Customer).
+  - **usecase/**: Contains the application’s use cases, implementing the core business workflows.
+  - **interface/**: Contains adapters for interacting with external systems, split into controllers (input) and presenters (output).
+  - **repository/**: Abstracts interactions with data sources, like databases or external APIs.
+- **pkg/**: Optional. Houses shared libraries that can be reused across projects.
+- **configs/**: Contains configuration files like YAML or JSON for managing environment-specific settings.
+- **docs/**: Stores project documentation, such as API specifications or architecture overviews.
 
-- It's not a problem to copy some code that have different intentions, you may repeat yourself in a query searching for a register before insert or update. 
+This structure enforces separation of concerns, making the application easier to maintain and scale.
 
+## Presenters
 
-###### Use cases tell a story ########
+- Transform output DTOs into the required format for delivery.
 
-- Use case is the end of the automatization which is the software
-- It rules the order things going to happen like: first  receive params, validate x, after validate y, get credit score, validate how much it is and then make a decision. 
-- ValidateName, validateAddress is going to be in the business rules
-- Entity is where we store the business rules.
+### Complete Implementation Example in Go
 
+```go
+package main
 
-###### architecture limit #####
+import (
+	"encoding/json"
+	"encoding/xml"
+	"fmt"
+)
 
-- Any tool that doesn't impact in the business rules should be in a architectural limit differente, like the type of db, the queue system, the front end technology. 
-- Entity are business rules. 
+type CategoryInputDTO struct {
+	Name string `json:"name"`
+}
 
+type CategoryOutputDTO struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
 
-###### Input x Output #########
+func CreateCategoryUseCase(input CategoryInputDTO) CategoryOutputDTO {
+	// Simulate creating a category and returning the result
+	return CategoryOutputDTO{
+		ID:   1,
+		Name: input.Name,
+	}
+}
 
-- At the end of the day everything summarizes as an output. 
-- Ex: Create an order (order data = input)
-- Order created (response order data)
-- Simplify your logic only thinking in input x output.
-##### !!!!!!!!!!! IMPORTANT !!!!!!!!!!!!!!! ##########
+type CategoryPresenter struct {
+	Output CategoryOutputDTO
+}
 
-- 1 - When you receive a data you receive it in the External interfaces such as (GraphQL, Rest, GRPC, CLI).
-- 2 - The Controller identify where this came from and do the validations and then send it to the use cases. 
-- 3 - The use case have the Responsibility to do the intention of the software, and it knows which business rules this call should access. 
-- 4 - The use case send this input to the business rules and receive an output, use case will continue the flow and send the output for the controlle which send a response to the external interfaces.
+func (p CategoryPresenter) ToJson() string {
+	result, _ := json.Marshal(p.Output)
+	return string(result)
+}
 
-Ex 2 : 
+func (p CategoryPresenter) ToXml() string {
+	result, _ := xml.MarshalIndent(p.Output, "", "  ")
+	return string(result)
+}
 
-- The present transforms the output in to the correct format depending of which external interface called it. 
+func main() {
+	input := CategoryInputDTO{Name: "Electronics"}
+	output := CreateCategoryUseCase(input)
+	presenter := CategoryPresenter{Output: output}
 
-- 1 - The flow is: 
-- Controller -> Use case input Port -> Use case interactor -> Presenter -> Use case Output Port and then rewind backwards. 
+	jsonResult := presenter.ToJson()
+	xmlResult := presenter.ToXml()
 
+	fmt.Println("JSON Result:")
+	fmt.Println(jsonResult)
+	fmt.Println("\nXML Result:")
+	fmt.Println(xmlResult)
+}
+```
 
-#### DTO - (Data Transfer Object) #######
+## Entities
 
-- To travel data among the architectural limits. 
-- This is a object without behavior, only have data, no rules.
-- There's a DTO for output and another for input, because they are different.
-
-Flow: 
-
-- API -> CONTROLLER -> USE CASE -> ENTITY. 
-- Controller creates a DTO with the request data and send it to the use case 
-- Use case execute it's own flow, get the result, create a DTO for the output and send a response to the controller again. 
-
-
-
-#### Presenters ###### 
-
-- Transformation objects
-- Format the DTO output in the right format to deliver the response.
-- TR: A system may have many formats of delivery ex: XML, JSON, Protobuf, GraphQL, CLI, etc.
-
-
-Ex: 
-
-    Input = new CategoryInputDTO("name");
-    Output = CreateCategoryUseCase(input);
-    jsonResult = CategoryPresenter(output).toJson();
-    xmlResult = CategoryPresenter(output).toXml();
-
-
-
-###### ####### Entity ##############
-
-- Entity in CA -> Layer
-- Entity in DDD - Represents something unique in the application
-- Clean architecture defines entity as the business rules layer. 
-- Them are applied in any situation. 
-- There's no explicit definition about how to create entities. 
-- Usually we use the DDD techniques. 
-- Entities in CA = Agregates + domain services. 
+- **In Clean Architecture:** Entities represent the business rules layer.
+- **In DDD:** Entities represent unique objects within the application.
+- **Combination:** Entities in Clean Architecture typically combine aggregates and domain services.
+- They are independent of specific situations and reusable across contexts.
